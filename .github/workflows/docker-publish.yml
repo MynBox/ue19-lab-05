@@ -1,0 +1,54 @@
+# Nom du workflow (affiché dans l'onglet "Actions" de GitHub)
+name: Publish Docker Image to GHCR
+
+# Déclencheur (trigger)
+# Ce workflow se lance à chaque 'push' sur la branche 'main'
+on:
+  push:
+    branches:
+      - main
+
+# Définition des "jobs" (tâches) à exécuter
+jobs:
+  build-and-publish:
+    # Utiliser la dernière version d'Ubuntu pour l'exécuteur
+    runs-on: ubuntu-latest
+    
+    # Permissions spéciales requises pour ce job
+    # 'contents: read' pour cloner le code
+    # 'packages: write' pour publier sur GitHub Packages (GHCR)
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # Étape 1 : Récupérer le code du repository
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      # Étape 2 : Se connecter au GitHub Container Registry (GHCR)
+      # Le GITHUB_TOKEN est un secret généré automatiquement par GitHub
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Étape 3 : Extraire les métadonnées (comme les tags) pour l'image Docker
+      # Crée automatiquement des tags comme 'latest' et des labels
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # Crée une image au format: ghcr.io/VOTRE_NOM/NOM_DU_REPO
+          images: ghcr.io/${{ github.repository }}
+
+      # Étape 4 : Construire l'image Docker et la pousser (publier) sur GHCR
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .  # Utilise le Dockerfile à la racine
+          push: true  # 'true' pour publier l'image
+          tags: ${{ steps.meta.outputs.tags }}    # Utilise les tags générés à l'étape 3
+          labels: ${{ steps.meta.outputs.labels }} # Ajoute les labels générés
