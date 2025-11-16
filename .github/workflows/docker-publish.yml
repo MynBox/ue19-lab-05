@@ -1,33 +1,28 @@
-# Nom du workflow (affiché dans l'onglet "Actions" de GitHub)
-name: Publish Docker Image to GHCR
+# Nom du workflow (mis à jour)
+name: Build, Scan, and Publish Docker Image
 
-# Déclencheur (trigger)
-# Ce workflow se lance à chaque 'push' sur la branche 'main'
+# Déclencheur (inchangé)
 on:
   push:
     branches:
       - main
 
-# Définition des "jobs" (tâches) à exécuter
 jobs:
-  build-and-publish:
-    # Utiliser la dernière version d'Ubuntu pour l'exécuteur
+  build-scan-publish:
+    # Utiliser la dernière version d'Ubuntu (inchangé)
     runs-on: ubuntu-latest
     
-    # Permissions spéciales requises pour ce job
-    # 'contents: read' pour cloner le code
-    # 'packages: write' pour publier sur GitHub Packages (GHCR)
+    # Permissions (inchangé)
     permissions:
       contents: read
       packages: write
 
     steps:
-      # Étape 1 : Récupérer le code du repository
+      # Étape 1 : Récupérer le code (inchangé)
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      # Étape 2 : Se connecter au GitHub Container Registry (GHCR)
-      # Le GITHUB_TOKEN est un secret généré automatiquement par GitHub
+      # Étape 2 : Se connecter à GHCR (inchangé)
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -35,20 +30,55 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Étape 3 : Extraire les métadonnées (comme les tags) pour l'image Docker
-      # Crée automatiquement des tags comme 'latest' et des labels
+      # Étape 3 : Extraire les métadonnées (inchangé)
       - name: Extract metadata for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # Crée une image au format: ghcr.io/VOTRE_NOM/NOM_DU_REPO
           images: ghcr.io/${{ github.repository }}
 
-      # Étape 4 : Construire l'image Docker et la pousser (publier) sur GHCR
-      - name: Build and push Docker image
+      # Étape 4 : Construire l'image (SANS la pousser)
+      # MODIFIÉ : On utilise load: true pour la rendre dispo localement
+      # et push: false pour ne PAS la publier tout de suite.
+      - name: Build and load local image
+        id: build-image
         uses: docker/build-push-action@v5
         with:
-          context: .  # Utilise le Dockerfile à la racine
-          push: true  # 'true' pour publier l'image
-          tags: ${{ steps.meta.outputs.tags }}    # Utilise les tags générés à l'étape 3
-          labels: ${{ steps.meta.outputs.labels }} # Ajoute les labels générés
+          context: .
+          load: true  # Charge l'image dans le daemon Docker local
+          push: false # Ne pousse PAS encore l'image
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # Étape 5 : NOUVELLE ÉTAPE DE SCAN TRIVY
+      # Scanne l'image qui vient d'être construite localement.
+      - name: Scan local image with Trivy
+        uses: aquasecurity/trivy-action@0.24.0 # On fixe la version
+        with:
+          # Référence à l'image locale (tags générés par l'étape 'meta')
+          image-ref: ${{ steps.meta.outputs.tags }}
+          format: 'table'
+          
+          # Fait échouer le build si des vulnérabilités sont trouvées
+          # C'est ce qui empêche la publication !
+          exit-code: '1' 
+          
+          # N'affiche que les problèmes pour lesquels un correctif existe
+          ignore-unfixed: true
+          
+          # Types de vulnérabilités à scanner (OS et librairies, ex: pip)
+          vuln-type: 'os,library'
+          
+          # Niveaux de sévérité qui feront échouer le build
+          severity: 'CRITICAL,HIGH'
+
+      # Étape 6 : Pousser (publier) l'image
+      # NOUVELLE ÉTAPE : Cette étape ne s'exécute QUE SI l'étape 5 (Scan)
+      # a réussi (c'est-à-dire n'a pas eu 'exit-code: 1').
+      - name: Push image to GHCR
+        uses: docker/build-push-action@v5
+        with:
+          context: . # Contexte requis pour trouver le cache de build
+          push: true # Pousse VRAIMENT l'image maintenant
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
