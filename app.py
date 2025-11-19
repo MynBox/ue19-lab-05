@@ -6,7 +6,7 @@ def get_joke():
     Interroge JokesAPI pour une blague de programmation en français et l'affiche.
     """
     # URL de l'API ciblée (Blagues de programmation, en français, safe)
-    url = "https://v2.jokeapi.dev/joke/Programming?lang=fr&safe-mode"
+    url = "https://v2.jokeapi.dev/joke/Any?lang=fr"
     
     print("Recherche d'une blague en cours...")
     
