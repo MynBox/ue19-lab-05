@@ -1,6 +1,6 @@
 # Utiliser une image Python officielle comme image de base
 # 'slim' est une version légère, idéale pour la production
-FROM python:3.7-slim
+FROM python:3.10-slim
 
 # Définir le répertoire de travail dans le conteneur
 WORKDIR /app
